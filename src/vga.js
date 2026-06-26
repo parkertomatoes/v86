@@ -196,6 +196,12 @@ export function VGAScreen(cpu, bus, screen, vga_memory_size)
     /** @type {number} */
     this.svga_height = 0;
 
+    /** @type {number} */
+    this.svga_virtual_width = 0;
+
+    /** @type {number} */
+    this.svga_virtual_height = 0;
+
     this.svga_enabled = false;
 
     /** @type {number} */
@@ -205,8 +211,8 @@ export function VGAScreen(cpu, bus, screen, vga_memory_size)
     this.svga_bank_offset = 0;
 
     /**
-     * The video buffer offset created by VBE_DISPI_INDEX_Y_OFFSET
-     * In bytes
+     * The video buffer offset created by VBE_DISPI_INDEX_X_OFFSET/Y_OFFSET
+     * In pixels
      * @type {number}
      */
     this.svga_offset = 0;
@@ -458,6 +464,8 @@ VGAScreen.prototype.get_state = function()
     state[62] = this.dac_mask;
     state[63] = this.character_map_select;
     state[64] = this.font_page_ab_enabled;
+    state[65] = this.svga_virtual_width;
+    state[66] = this.svga_virtual_height;
 
     return state;
 };
@@ -481,6 +489,8 @@ VGAScreen.prototype.set_state = function(state)
     this.miscellaneous_graphics_register = state[14];
     this.svga_width = state[15];
     this.svga_height = state[16];
+    this.svga_virtual_width = state[65] === undefined ? this.svga_width : state[65];
+    this.svga_virtual_height = state[66] === undefined ? this.svga_height : state[66];
     this.crtc_mode = state[17];
     this.svga_enabled = state[18];
     this.svga_bpp = state[19];
@@ -540,7 +550,7 @@ VGAScreen.prototype.set_state = function(state)
     {
         if(this.svga_enabled)
         {
-            this.set_size_graphical(this.svga_width, this.svga_height, this.svga_width, this.svga_height, this.svga_bpp);
+            this.set_size_graphical(this.svga_width, this.svga_height, this.get_svga_virtual_width(), this.get_svga_virtual_height(), this.svga_bpp);
             this.update_layers();
         }
         else
@@ -2140,6 +2150,32 @@ VGAScreen.prototype.port1CE_write = function(value)
     this.dispi_index = value;
 };
 
+VGAScreen.prototype.get_svga_virtual_width = function()
+{
+    return Math.max(this.svga_virtual_width || this.svga_width, this.svga_width, 1);
+};
+
+VGAScreen.prototype.get_svga_virtual_height = function()
+{
+    return Math.max(this.svga_virtual_height || this.svga_height, this.svga_height, 1);
+};
+
+VGAScreen.prototype.update_svga_offset = function()
+{
+    this.svga_offset = this.svga_offset_y * this.get_svga_virtual_width() + this.svga_offset_x;
+};
+
+VGAScreen.prototype.update_svga_size = function()
+{
+    this.set_size_graphical(
+        this.svga_width,
+        this.svga_height,
+        this.get_svga_virtual_width(),
+        this.get_svga_virtual_height(),
+        this.svga_bpp
+    );
+};
+
 VGAScreen.prototype.port1CF_write = function(value)
 {
     dbg_log("1CF / dispi write " + h(this.dispi_index) + ": " + h(value), LOG_VGA);
@@ -2165,6 +2201,10 @@ VGAScreen.prototype.port1CF_write = function(value)
                 dbg_log("svga_width reduced from " + this.svga_width + " to " + MAX_XRES, LOG_VGA);
                 this.svga_width = MAX_XRES;
             }
+            if(!was_enabled)
+            {
+                this.svga_virtual_width = 0;
+            }
             break;
         case 2:
             this.svga_height = value;
@@ -2173,9 +2213,18 @@ VGAScreen.prototype.port1CF_write = function(value)
                 dbg_log("svga_height reduced from " + this.svga_height + " to " + MAX_YRES, LOG_VGA);
                 this.svga_height = MAX_YRES;
             }
+            if(!was_enabled)
+            {
+                this.svga_virtual_height = 0;
+            }
             break;
         case 3:
             this.svga_bpp = value;
+            if(!was_enabled)
+            {
+                this.svga_virtual_width = 0;
+                this.svga_virtual_height = 0;
+            }
             break;
         case 4:
             // enable, options
@@ -2203,23 +2252,52 @@ VGAScreen.prototype.port1CF_write = function(value)
             dbg_log("SVGA bank offset: " + h(value << 16), LOG_VGA);
             this.svga_bank_offset = value << 16;
             break;
+        case 6:
+            // virtual width
+            this.svga_virtual_width = value;
+            if(this.svga_virtual_width > MAX_XRES)
+            {
+                dbg_log("svga_virtual_width reduced from " + this.svga_virtual_width + " to " + MAX_XRES, LOG_VGA);
+                this.svga_virtual_width = MAX_XRES;
+            }
+            this.update_svga_offset();
+            if(this.svga_enabled)
+            {
+                this.update_svga_size();
+                this.complete_redraw();
+            }
+            break;
+        case 7:
+            // virtual height
+            this.svga_virtual_height = value;
+            if(this.svga_virtual_height > MAX_YRES)
+            {
+                dbg_log("svga_virtual_height reduced from " + this.svga_virtual_height + " to " + MAX_YRES, LOG_VGA);
+                this.svga_virtual_height = MAX_YRES;
+            }
+            if(this.svga_enabled)
+            {
+                this.update_svga_size();
+                this.complete_redraw();
+            }
+            break;
         case 8:
             // x offset
             dbg_log("SVGA X offset: " + h(value), LOG_VGA);
             if(this.svga_offset_x !== value)
             {
                 this.svga_offset_x = value;
-                this.svga_offset = this.svga_offset_y * this.svga_width + this.svga_offset_x;
+                this.update_svga_offset();
                 this.complete_redraw();
             }
             break;
         case 9:
             // y offset
-            dbg_log("SVGA Y offset: " + h(value * this.svga_width) + " y=" + h(value), LOG_VGA);
+            dbg_log("SVGA Y offset: " + h(value * this.get_svga_virtual_width()) + " y=" + h(value), LOG_VGA);
             if(this.svga_offset_y !== value)
             {
                 this.svga_offset_y = value;
-                this.svga_offset = this.svga_offset_y * this.svga_width + this.svga_offset_x;
+                this.update_svga_offset();
                 this.complete_redraw();
             }
             break;
@@ -2259,7 +2337,7 @@ VGAScreen.prototype.port1CF_write = function(value)
 
         this.graphical_mode = true;
         this.screen.set_mode(this.graphical_mode);
-        this.set_size_graphical(this.svga_width, this.svga_height, this.svga_width, this.svga_height, this.svga_bpp);
+        this.update_svga_size();
     }
 
     if(was_enabled && !this.svga_enabled)
@@ -2304,15 +2382,10 @@ VGAScreen.prototype.svga_register_read = function(n)
             return this.svga_bank_offset >>> 16;
         case 6:
             // virtual width
-            if(this.screen_width)
-            {
-                return this.screen_width;
-            }
-            else
-            {
-                return 1; // seabios/windows98 divide exception
-            }
-            break;
+            return this.dispi_enable_value & 2 ? MAX_XRES : this.get_svga_virtual_width();
+        case 7:
+            // virtual height
+            return this.dispi_enable_value & 2 ? MAX_YRES : this.get_svga_virtual_height();
 
         case 8:
             // x offset
@@ -2530,11 +2603,13 @@ VGAScreen.prototype.screen_fill_buffer = function()
         let min_y = 0;
         let max_y = this.svga_height;
 
+        const svga_virtual_width = this.get_svga_virtual_width();
+        const svga_virtual_height = this.get_svga_virtual_height();
         if(this.svga_bpp === 8)
         {
             // XXX: Slow, should be ported to rust, but it doesn't have access to vga256_palette
             // XXX: Doesn't take svga_offset into account
-            const buffer = new Int32Array(this.cpu.wasm_memory.buffer, this.dest_buffet_offset, this.screen_width * this.screen_height);
+            const buffer = new Int32Array(this.cpu.wasm_memory.buffer, this.dest_buffet_offset, svga_virtual_width * svga_virtual_height);
             const svga_memory = new Uint8Array(this.cpu.wasm_memory.buffer, this.svga_memory.byteOffset, this.vga_memory_size);
 
             for(var i = 0; i < buffer.length; i++)
@@ -2548,8 +2623,8 @@ VGAScreen.prototype.screen_fill_buffer = function()
             this.cpu.svga_fill_pixel_buffer(this.svga_bpp, this.svga_offset);
 
             const bytes_per_pixel = this.svga_bpp === 15 ? 2 : this.svga_bpp / 8;
-            min_y = (((this.cpu.svga_dirty_bitmap_min_offset[0] / bytes_per_pixel | 0) - this.svga_offset) / this.svga_width | 0);
-            max_y = (((this.cpu.svga_dirty_bitmap_max_offset[0] / bytes_per_pixel | 0) - this.svga_offset) / this.svga_width | 0) + 1;
+            min_y = (((this.cpu.svga_dirty_bitmap_min_offset[0] / bytes_per_pixel | 0) - this.svga_offset) / svga_virtual_width | 0);
+            max_y = (((this.cpu.svga_dirty_bitmap_max_offset[0] / bytes_per_pixel | 0) - this.svga_offset) / svga_virtual_width | 0) + 1;
         }
 
         if(min_y < max_y)
