@@ -19,6 +19,7 @@ import { ACPI } from "./acpi.js";
 import { PIT } from "./pit.js";
 import { DMA } from "./dma.js";
 import { UART } from "./uart.js";
+import { ParallelPort } from "./parallel.js";
 import { Ne2k } from "./ne2k.js";
 import { IO } from "./io.js";
 import { VirtioConsole } from "./virtio_console.js";
@@ -567,6 +568,7 @@ CPU.prototype.get_state = function()
     state[87] = this.fpu_status_word;
     state[88] = this.mxcsr;
     state[89] = this.devices.vmware;
+    state[90] = this.devices.parallel;
 
     return state;
 };
@@ -735,6 +737,7 @@ CPU.prototype.set_state = function(state)
     this.devices.virtio_net && this.devices.virtio_net.set_state(state[83]);
     this.devices.virtio_balloon && this.devices.virtio_balloon.set_state(state[84]);
     this.devices.vmware && state[89] && this.devices.vmware.set_state(state[89]);
+    this.devices.parallel && state[90] && this.devices.parallel.set_state(state[90]);
 
     this.fw_value = state[62];
 
@@ -1180,6 +1183,7 @@ CPU.prototype.init = function(settings, device_bus)
         this.devices.vmware = new VMwareMouse(this, device_bus);
 
         this.devices.uart0 = new UART(this, 0x3F8, device_bus);
+        this.devices.parallel = new ParallelPort(this, device_bus);
 
         if(settings.uart1)
         {

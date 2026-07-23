@@ -221,6 +221,9 @@ export interface Event {
     "serial2-output-byte": number;
     "serial3-input": number;
     "serial3-output-byte": number;
+    "parallel0-data-output": number;
+    "parallel0-control-output": number;
+    "parallel0-status-input": number;
     "virtio-console0-output-bytes": Uint8Array;
     "virtio-console0-input-bytes": Uint8Array;
     "virtio-console0-resize": [cols: number, rows: number];
