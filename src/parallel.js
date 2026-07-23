@@ -117,7 +117,7 @@ ParallelPort.prototype.set_status = function(value)
     const ack_fell = ack_prev && !ack_next;
     if(ack_fell)
     {
-        /*         
+        /*
            Both seabios and Boch's BIOS send data by latching
            the data lines, pulsing the strobe line, and then
            polling the status register until ACK goes low.
@@ -125,7 +125,7 @@ ParallelPort.prototype.set_status = function(value)
            A typical ACK low pulse is 5-10us.
 
            v86 doesn't have a precise scheduler for devices to pulse lines.
-           The hack here is to let the peripheral go as fast as it 
+           The hack here is to let the peripheral go as fast as it
            wants, and latch ACK drops so the BIOS can detect them.
          */
         this.status_latched = status_next;
