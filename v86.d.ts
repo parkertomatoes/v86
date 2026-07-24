@@ -224,6 +224,9 @@ export interface Event {
     "parallel0-data-output": number;
     "parallel0-control-output": number;
     "parallel0-status-input": number;
+    "parallel1-data-output": number;
+    "parallel1-control-output": number;
+    "parallel1-status-input": number;
     "virtio-console0-output-bytes": Uint8Array;
     "virtio-console0-input-bytes": Uint8Array;
     "virtio-console0-resize": [cols: number, rows: number];
@@ -608,6 +611,12 @@ export interface V86Options {
      * @default false
      */
     uart3?: boolean;
+
+    /**
+     * Enable LPT2 (parallel1)
+     * @default false
+     */
+    parallel1?: boolean;
 }
 
 export class V86 {

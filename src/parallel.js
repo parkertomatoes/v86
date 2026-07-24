@@ -1,6 +1,8 @@
-import { dbg_assert } from "./log.js";
+// For Types Only
+import { CPU } from "./cpu.js";
+import { BusConnector } from "./bus.js";
 
-const LPT1_PORT = 0x378;
+import { dbg_assert } from "./log.js";
 
 const DATA_PORT = 0;
 const STATUS_PORT = 1;
@@ -15,20 +17,18 @@ const CONTROL_IRQ_ENABLE = 0x10;
 const CONTROL_MASK = 0x1F;
 const STATUS_IDLE = STATUS_NOT_BUSY | STATUS_ACK | STATUS_SELECT | STATUS_ERROR;
 
-const LPT1_IRQ = 7;
-const DATA_OUTPUT_EVENT = "parallel0-data-output";
-const CONTROL_OUTPUT_EVENT = "parallel0-control-output";
-const STATUS_INPUT_EVENT = "parallel0-status-input";
-
 /**
- * LPT1 parallel port.
+ * Parallel port.
  *
  * @constructor
  *
  * @param {CPU} cpu
+ * @param {number} port
+ * @param {number} irq
+ * @param {number} lpt (zero-based)
  * @param {BusConnector} bus
  */
-export function ParallelPort(cpu, bus)
+export function ParallelPort(cpu, port, irq, lpt, bus)
 {
     /** @const */
     this.cpu = cpu;
@@ -40,18 +40,24 @@ export function ParallelPort(cpu, bus)
     this.status = STATUS_IDLE;
     this.control = 0;
     this.status_latched = undefined;
+    this.irq = irq;
+    this.lpt = lpt;
+
+    this.data_output_event = "parallel" + this.lpt + "-data-output";
+    this.control_output_event = "parallel" + this.lpt + "-control-output";
+    this.status_input_event = "parallel" + this.lpt + "-status-input";
 
     const io = cpu.io;
 
-    this.bus.register(STATUS_INPUT_EVENT, this.set_status, this);
+    this.bus.register(this.status_input_event, this.set_status, this);
 
-    io.register_read(LPT1_PORT + DATA_PORT, this, this.read_data, this.read_data_status);
-    io.register_read(LPT1_PORT + STATUS_PORT, this, this.read_status, this.read_status_control);
-    io.register_read(LPT1_PORT + CONTROL_PORT, this, this.read_control);
+    io.register_read(port + DATA_PORT, this, this.read_data, this.read_data_status);
+    io.register_read(port + STATUS_PORT, this, this.read_status, this.read_status_control);
+    io.register_read(port + CONTROL_PORT, this, this.read_control);
 
-    io.register_write(LPT1_PORT + DATA_PORT, this, this.write_data, this.write_data_status);
-    io.register_write(LPT1_PORT + STATUS_PORT, this, this.write_status, this.write_status_control);
-    io.register_write(LPT1_PORT + CONTROL_PORT, this, this.write_control);
+    io.register_write(port + DATA_PORT, this, this.write_data, this.write_data_status);
+    io.register_write(port + STATUS_PORT, this, this.write_status, this.write_status_control);
+    io.register_write(port + CONTROL_PORT, this, this.write_control);
 }
 
 ParallelPort.prototype.read_data = function()
@@ -79,7 +85,7 @@ ParallelPort.prototype.write_data = function(value)
     dbg_assert(value >= 0 && value <= 0xFF);
 
     this.data = value & 0xFF;
-    this.bus.send(DATA_OUTPUT_EVENT, this.data);
+    this.bus.send(this.data_output_event, this.data);
 };
 
 ParallelPort.prototype.write_data_status = function(value)
@@ -131,8 +137,8 @@ ParallelPort.prototype.set_status = function(value)
         this.status_latched = status_next;
         if(this.control & CONTROL_IRQ_ENABLE)
         {
-            this.cpu.device_lower_irq(LPT1_IRQ);
-            this.cpu.device_raise_irq(LPT1_IRQ);
+            this.cpu.device_lower_irq(this.irq);
+            this.cpu.device_raise_irq(this.irq);
         }
     }
 };
@@ -154,7 +160,7 @@ ParallelPort.prototype.write_control = function(value)
     dbg_assert(value >= 0 && value <= 0xFF);
 
     this.control = value & CONTROL_MASK;
-    this.bus.send(CONTROL_OUTPUT_EVENT, this.control);
+    this.bus.send(this.control_output_event, this.control);
 };
 
 ParallelPort.prototype.get_state = function()
@@ -179,7 +185,3 @@ ParallelPort.prototype.set_state = function(state)
     this.control = state[2];
     this.status_latched = state[3];
 };
-
-// For Types Only
-import { CPU } from "./cpu.js";
-import { BusConnector } from "./bus.js";

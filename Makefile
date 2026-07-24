@@ -349,6 +349,7 @@ expect-tests: build/v86-debug.wasm build/libwabt.cjs
 	./tests/expect/run.js
 
 devices-test: build/v86-debug.wasm
+	./tests/devices/parallel.js
 	./tests/devices/virtio_9p.js
 	./tests/devices/virtio_console.js
 	./tests/devices/fetch_network.js
