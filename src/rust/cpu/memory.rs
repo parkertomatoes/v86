@@ -2,6 +2,7 @@ mod ext {
     #[link(wasm_import_module = "env")]
     extern "C" {
         pub fn mmap_read8(addr: u32) -> i32;
+        pub fn mmap_read16(addr: u32) -> i32;
         pub fn mmap_read32(addr: u32) -> i32;
 
         pub fn mmap_write8(addr: u32, value: i32);
@@ -112,8 +113,15 @@ pub fn read16(addr: u32) -> i32 {
                     as i32
             }
         }
-        else {
+        else if addr >= APIC_MEM_ADDRESS && addr < APIC_MEM_ADDRESS + APIC_MEM_SIZE
+            || addr >= IOAPIC_MEM_ADDRESS && addr < IOAPIC_MEM_ADDRESS + IOAPIC_MEM_SIZE
+        {
+            // Preserve the original bytewise behavior for the APIC windows;
+            // they are handled inside read8 rather than the JS MMIO table.
             read8(addr) | read8(addr + 1) << 8
+        }
+        else {
+            unsafe { ext::mmap_read16(addr) }
         }
     }
     else {

@@ -201,9 +201,22 @@ export interface Event {
         loaded: number,
     };
     "emulator-loaded": void;
+    "emulator-error": { message: string };
     "emulator-ready": void;
     "emulator-started": void;
     "emulator-stopped": void;
+    "voodoo1-device-lost": {
+        reason: string,
+        message: string,
+    };
+    "voodoo1-webgpu-ready": {
+        vendor: string,
+        architecture: string,
+        device: string,
+        description: string,
+        canvas_format: string,
+    };
+    "voodoo1-telemetry": Uint32Array;
     "eth-receive-end": [byte_count: number];
     "eth-transmit-end": [byte_count: number];
     "ide-read-end": [channel_nr: number, byte_count: number, sector_count: number];
@@ -367,6 +380,13 @@ export interface V86Options {
      * @default 8 * 1024 * 1024
      */
     vga_memory_size?: number;
+
+    /**
+     * Enable a 4 MiB 3dfx Voodoo Graphics (SST-1) device. Requires a
+     * non-fallback WebGPU adapter and a browser screen container.
+     * @default false
+     */
+    voodoo1?: boolean;
 
     /**
      * If emulation should be started when emulator is ready.

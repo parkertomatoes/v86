@@ -20,6 +20,13 @@ endif
 WASM_OPT ?= false
 
 default: build/v86-debug.wasm
+.PHONY: voodoo1-guest-programs voodoo1-test
+voodoo1-guest-programs:
+	$(MAKE) -C tests/voodoo1
+
+voodoo1-test:
+	$(MAKE) -C tests/voodoo1 test
+
 all: build/v86_all.js build/libv86.js build/libv86.mjs build/v86.wasm
 all-debug: build/libv86-debug.js build/libv86-debug.mjs build/v86-debug.wasm
 browser: build/v86_all.js
@@ -79,13 +86,13 @@ CARGO_FLAGS_SAFE=\
 CARGO_FLAGS=$(CARGO_FLAGS_SAFE) -C target-feature=+bulk-memory -C target-feature=+multivalue -C target-feature=+simd128
 
 CORE_FILES=cjs.js const.js io.js main.js lib.js buffer.js ide.js pci.js floppy.js \
-	   dma.js pit.js vga.js ps2.js rtc.js uart.js parallel.js vmware.js \
+	   dma.js pit.js vga.js voodoo1.js voodoo1_webgpu.js ps2.js rtc.js uart.js parallel.js vmware.js \
 	   acpi.js iso9660.js \
 	   state.js ne2k.js sb16.js virtio.js virtio_console.js virtio_net.js virtio_balloon.js \
 	   bus.js log.js cpu.js \
 	   elf.js kernel.js
 LIB_FILES=9p.js filesystem.js marshall.js
-BROWSER_FILES=screen.js keyboard.js mouse.js speaker.js serial.js \
+BROWSER_FILES=screen.js voodoo1_screen.js keyboard.js mouse.js speaker.js serial.js \
 	      network.js starter.js worker_bus.js dummy_screen.js ansi_screen.js \
 	      inbrowser_network.js fake_network.js wisp_network.js fetch_network.js \
           print_stats.js filestorage.js modem.js

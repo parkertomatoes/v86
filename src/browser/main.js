@@ -1793,6 +1793,7 @@ function onload()
     if(query_args.has("relay_url")) $("relay_url").value = query_args.get("relay_url");
     if(query_args.has("mute")) $("disable_audio").checked = bool_arg(query_args.get("mute"));
     if(query_args.has("acpi")) $("acpi").checked = bool_arg(query_args.get("acpi"));
+    if(query_args.has("voodoo1")) $("enable_voodoo1").checked = bool_arg(query_args.get("voodoo1"));
     if(query_args.has("boot_order")) $("boot_order").value = query_args.get("boot_order");
     if(query_args.has("net_device_type")) $("net_device_type").value = query_args.get("net_device_type");
     if(query_args.has("mtu")) $("mtu").value = query_args.get("mtu");
@@ -2107,6 +2108,7 @@ function start_emulation(profile, query_args)
         settings.boot_order = profile.boot_order;
         settings.net_device_type = profile.net_device_type;
         settings.modem = profile.modem;
+        settings.voodoo1 = true;
 
         if(!DEBUG && profile.homepage)
         {
@@ -2121,6 +2123,11 @@ function start_emulation(profile, query_args)
 
     if(query_args)
     {
+        if(query_args.has("voodoo1"))
+        {
+            settings.voodoo1 = bool_arg(query_args.get("voodoo1"));
+        }
+
         // ignore certain settings when using a state image
         if(!settings.initial_state)
         {
@@ -2236,6 +2243,12 @@ function start_emulation(profile, query_args)
     }
     settings.disable_audio = $("disable_audio").checked || settings.disable_audio;
     if(settings.disable_audio) new_query_args.set("mute", "1");
+
+    if(settings.voodoo1 === undefined)
+    {
+        settings.voodoo1 = $("enable_voodoo1").checked;
+    }
+    if(settings.voodoo1) new_query_args.set("voodoo1", "1");
 
     // some settings cannot be overridden when a state image is used
     if(!settings.initial_state)
@@ -2432,6 +2445,7 @@ function start_emulation(profile, query_args)
         disable_speaker: settings.disable_audio,
         mac_address_translation: settings.mac_address_translation,
         cpuid_level: settings.cpuid_level,
+        voodoo1: settings.voodoo1,
     });
 
     if(DEBUG) window.emulator = emulator;

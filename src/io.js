@@ -33,7 +33,8 @@ export function IO(cpu)
     for(var i = 0; (i << MMAP_BLOCK_BITS) < memory_size; i++)
     {
         // avoid sparse arrays
-        cpu.memory_map_read8[i] = cpu.memory_map_write8[i] = undefined;
+        cpu.memory_map_read8[i] = cpu.memory_map_read16[i] = undefined;
+        cpu.memory_map_write8[i] = cpu.memory_map_write16[i] = undefined;
         cpu.memory_map_read32[i] = cpu.memory_map_write32[i] = undefined;
     }
 
@@ -274,6 +275,23 @@ IO.prototype.mmap_write32_shim = function(addr, value)
     fn(addr + 3, value >>> 24);
 };
 
+IO.prototype.mmap_read16_shim = function(addr)
+{
+    var fn0 = this.cpu.memory_map_read8[addr >>> MMAP_BLOCK_BITS];
+    var fn1 = this.cpu.memory_map_read8[(addr + 1) >>> MMAP_BLOCK_BITS];
+
+    return fn0(addr) | fn1(addr + 1) << 8;
+};
+
+IO.prototype.mmap_write16_shim = function(addr, value)
+{
+    var fn0 = this.cpu.memory_map_write8[addr >>> MMAP_BLOCK_BITS];
+    var fn1 = this.cpu.memory_map_write8[(addr + 1) >>> MMAP_BLOCK_BITS];
+
+    fn0(addr, value & 0xFF);
+    fn1(addr + 1, value >>> 8);
+};
+
 /**
  * @param {number} addr
  * @param {number} size
@@ -281,8 +299,11 @@ IO.prototype.mmap_write32_shim = function(addr, value)
  * @param {*} write_func8
  * @param {*=} read_func32
  * @param {*=} write_func32
+ * @param {*=} read_func16
+ * @param {*=} write_func16
  */
-IO.prototype.mmap_register = function(addr, size, read_func8, write_func8, read_func32, write_func32)
+IO.prototype.mmap_register = function(addr, size, read_func8, write_func8,
+    read_func32, write_func32, read_func16, write_func16)
 {
     dbg_log("mmap_register addr=" + h(addr >>> 0, 8) + " size=" + h(size, 8), LOG_IO);
 
@@ -294,13 +315,19 @@ IO.prototype.mmap_register = function(addr, size, read_func8, write_func8, read_
 
     if(!write_func32)
         write_func32 = this.mmap_write32_shim.bind(this);
+    if(!read_func16)
+        read_func16 = this.mmap_read16_shim.bind(this);
+    if(!write_func16)
+        write_func16 = this.mmap_write16_shim.bind(this);
 
     var aligned_addr = addr >>> MMAP_BLOCK_BITS;
 
     for(; size > 0; aligned_addr++)
     {
         this.cpu.memory_map_read8[aligned_addr] = read_func8;
+        this.cpu.memory_map_read16[aligned_addr] = read_func16;
         this.cpu.memory_map_write8[aligned_addr] = write_func8;
+        this.cpu.memory_map_write16[aligned_addr] = write_func16;
         this.cpu.memory_map_read32[aligned_addr] = read_func32;
         this.cpu.memory_map_write32[aligned_addr] = write_func32;
 

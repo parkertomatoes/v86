@@ -2109,23 +2109,13 @@ VGAScreen.prototype.port3DA_read = function()
 
     var value = this.port_3DA_value;
 
-    // Status register, bit 3 set by update_vertical_retrace
-    // during screen-fill-buffer
-    if(!this.graphical_mode)
+    // Hack to mitigate a crash in tomb raider demo
+    // should probably be left out
+    if(this.port_3DA_value & 1)
     {
-        // But screen-fill-buffer may not get triggered in text mode
-        // so toggle it manually here
-        if(this.port_3DA_value & 1)
-        {
-            this.port_3DA_value ^= 8;
-        }
-        this.port_3DA_value ^= 1;
+        this.port_3DA_value ^= 8;
     }
-    else
-    {
-        this.port_3DA_value ^= 1;
-        this.port_3DA_value &= 1;
-    }
+    this.port_3DA_value ^= 1;
     this.attribute_controller_index = -1;
     return value;
 };

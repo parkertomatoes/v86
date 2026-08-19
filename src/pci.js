@@ -295,7 +295,9 @@ PCI.prototype.pci_query = function()
 
         if(addr < device.byteLength)
         {
-            this.pci_response32[0] = device[addr >> 2];
+            var pci_device = this.devices[bdf];
+            var hooked_value = pci_device.pci_read32 && pci_device.pci_read32(addr);
+            this.pci_response32[0] = hooked_value === undefined ? device[addr >> 2] : hooked_value;
         }
         else
         {
@@ -341,6 +343,11 @@ PCI.prototype.pci_write8 = function(address, written)
             " value=" + h(written, 2), LOG_PCI);
 
     space[addr] = written;
+
+    if(device.pci_write)
+    {
+        device.pci_write(addr, 1, written);
+    }
 };
 
 PCI.prototype.pci_write16 = function(address, written)
@@ -372,11 +379,18 @@ PCI.prototype.pci_write16 = function(address, written)
             " value=" + h(written, 4), LOG_PCI);
 
     space[addr >>> 1] = written;
+
+    if(device.pci_write)
+    {
+        device.pci_write(addr, 2, written);
+    }
 };
 
 PCI.prototype.pci_write32 = function(address, written)
 {
     dbg_assert((address & 3) === 0);
+
+    var original_written = written;
 
     var bdf = address >> 8 & 0xFFFF;
     var addr = address & 0xFF;
@@ -418,16 +432,23 @@ PCI.prototype.pci_write32 = function(address, written)
                 if(type === 0)
                 {
                     // memory
-                    var original_bar = bar.original_bar;
-
-                    if((written & ~0xF) !== (original_bar & ~0xF))
+                    if(device.pci_bar_write)
                     {
-                        // seabios
-                        dbg_log("Warning: Changing memory bar not supported, ignored", LOG_PCI);
+                        space[space_addr] = device.pci_bar_write(bar_nr, written);
                     }
+                    else
+                    {
+                        var original_bar = bar.original_bar;
 
-                    // changing isn't supported yet, reset to default
-                    space[space_addr] = original_bar;
+                        if((written & ~0xF) !== (original_bar & ~0xF))
+                        {
+                            // seabios
+                            dbg_log("Warning: Changing memory bar not supported, ignored", LOG_PCI);
+                        }
+
+                        // changing isn't supported yet, reset to default
+                        space[space_addr] = original_bar;
+                    }
                 }
             }
 
@@ -482,6 +503,11 @@ PCI.prototype.pci_write32 = function(address, written)
         dbg_log("PCI write dev=" + h(bdf >> 3, 2) + " (" + device.name + ") addr=" + h(addr, 4) +
                 " value=" + h(written >>> 0, 8), LOG_PCI);
         space[addr >>> 2] = written;
+    }
+
+    if(device.pci_write)
+    {
+        device.pci_write(addr, 4, original_written);
     }
 };
 

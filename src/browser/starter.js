@@ -14,11 +14,13 @@ import { WispNetworkAdapter } from "./wisp_network.js";
 import { KeyboardAdapter } from "./keyboard.js";
 import { MouseAdapter } from "./mouse.js";
 import { ScreenAdapter } from "./screen.js";
+import { Voodoo1ScreenAdapter } from "./voodoo1_screen.js";
 import { DummyScreenAdapter } from "./dummy_screen.js";
 import { ANSIScreenAdapter } from "./ansi_screen.js";
 import { SerialAdapter, VirtioConsoleAdapter, SerialAdapterXtermJS, VirtioConsoleAdapterXtermJS } from "./serial.js";
 import { InBrowserNetworkAdapter } from "./inbrowser_network.js";
 import { Modem } from "./modem.js";
+import { Voodoo1WebGPU } from "../voodoo1_webgpu.js";
 
 import { MemoryFileStorage, ServerFileStorageWrapper } from "./filestorage.js";
 import { SyncBuffer, buffer_from_object } from "../buffer.js";
@@ -79,6 +81,7 @@ export function V86(options)
         "io_port_write32": function(addr, value) { cpu.io.port_write32(addr, value); },
 
         "mmap_read8": function(addr) { return cpu.mmap_read8(addr); },
+        "mmap_read16": function(addr) { return cpu.mmap_read16(addr); },
         "mmap_read32": function(addr) { return cpu.mmap_read32(addr); },
         "mmap_write8": function(addr, value) { cpu.mmap_write8(addr, value); },
         "mmap_write16": function(addr, value) { cpu.mmap_write16(addr, value); },
@@ -317,6 +320,22 @@ V86.prototype.continue_init = async function(emulator, options)
     }
     settings.screen = this.screen_adapter;
     settings.screen_options = screen_options;
+
+    let voodoo1_init = null;
+    if(options.voodoo1)
+    {
+        try
+        {
+            this.voodoo1_screen_adapter = new Voodoo1ScreenAdapter(screen_options, this.bus);
+            voodoo1_init = Voodoo1WebGPU.create(
+                this.voodoo1_screen_adapter.get_canvas(), this.emulator_bus)
+                .then(backend => ({ backend }), error => ({ error }));
+        }
+        catch(error)
+        {
+            voodoo1_init = Promise.resolve({ error });
+        }
+    }
 
     settings.serial_console = options.serial_console || { type: "none" };
 
@@ -629,6 +648,21 @@ V86.prototype.continue_init = async function(emulator, options)
                 "bzimage_initrd_from_filesystem: Requires a filesystem");
         }
 
+        if(voodoo1_init)
+        {
+            const result = await voodoo1_init;
+            if(result.error)
+            {
+                const message = result.error instanceof Error ? result.error.message : String(result.error);
+                this.voodoo1_screen_adapter && this.voodoo1_screen_adapter.destroy();
+                this.voodoo1_screen_adapter = null;
+                this.emulator_bus.send("emulator-error", { message });
+                console.error(message);
+                return;
+            }
+            settings.voodoo1 = result.backend;
+        }
+
         this.serial_adapter && this.serial_adapter.show && this.serial_adapter.show();
         this.virtio_console_adapter && this.virtio_console_adapter.show && this.virtio_console_adapter.show();
 
@@ -701,7 +735,7 @@ V86.prototype.zstd_decompress_worker = async function(decompressed_size, src)
                         "cpu_event_halt", "microtick", "get_rand_int", "stop_idling",
                         "io_port_read8", "io_port_read16", "io_port_read32",
                         "io_port_write8", "io_port_write16", "io_port_write32",
-                        "mmap_read8", "mmap_read32",
+                        "mmap_read8", "mmap_read16", "mmap_read32",
                         "mmap_write8", "mmap_write16", "mmap_write32", "mmap_write64", "mmap_write128",
                         "codegen_finalize",
                         "jit_clear_func", "jit_clear_all_funcs",
@@ -826,6 +860,7 @@ V86.prototype.destroy = async function()
 {
     await this.stop();
 
+    this.v86.cpu.devices.voodoo1 && this.v86.cpu.devices.voodoo1.destroy();
     this.v86.destroy();
     this.keyboard_adapter && this.keyboard_adapter.destroy();
     this.network_adapter && this.network_adapter.destroy();
@@ -835,6 +870,7 @@ V86.prototype.destroy = async function()
     this.speaker_adapter && this.speaker_adapter.destroy();
     this.virtio_console_adapter && this.virtio_console_adapter.destroy();
     this.modem && this.modem.destroy();
+    this.voodoo1_screen_adapter && this.voodoo1_screen_adapter.destroy();
 };
 
 /**

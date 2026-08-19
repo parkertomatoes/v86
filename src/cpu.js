@@ -32,6 +32,7 @@ import { FloppyController } from "./floppy.js";
 import { IDEController } from "./ide.js";
 import { VirtioNet } from "./virtio_net.js";
 import { VGAScreen } from "./vga.js";
+import { Voodoo1 } from "./voodoo1.js";
 import { VirtioBalloon } from "./virtio_balloon.js";
 import { Virtio9p, Virtio9pHandler, Virtio9pProxy } from "../lib/9p.js";
 
@@ -156,7 +157,9 @@ export function CPU(bus, wm, stop_idling)
 
     // managed in io.js
     /** @const */ this.memory_map_read8 = [];
+    /** @const */ this.memory_map_read16 = [];
     /** @const */ this.memory_map_write8 = [];
+    /** @const */ this.memory_map_write16 = [];
     /** @const */ this.memory_map_read32 = [];
     /** @const */ this.memory_map_write32 = [];
 
@@ -243,13 +246,17 @@ CPU.prototype.mmap_write8 = function(addr, value)
     this.memory_map_write8[addr >>> MMAP_BLOCK_BITS](addr, value);
 };
 
+CPU.prototype.mmap_read16 = function(addr)
+{
+    const value = this.memory_map_read16[addr >>> MMAP_BLOCK_BITS](addr);
+    dbg_assert(value >= 0 && value <= 0xFFFF);
+    return value;
+};
+
 CPU.prototype.mmap_write16 = function(addr, value)
 {
-    var fn = this.memory_map_write8[addr >>> MMAP_BLOCK_BITS];
-
     dbg_assert(value >= 0 && value <= 0xFFFF);
-    fn(addr, value & 0xFF);
-    fn(addr + 1 | 0, value >> 8);
+    this.memory_map_write16[addr >>> MMAP_BLOCK_BITS](addr, value);
 };
 
 CPU.prototype.mmap_read32 = function(addr)
@@ -570,6 +577,7 @@ CPU.prototype.get_state = function()
     state[89] = this.devices.vmware;
     state[90] = this.devices.parallel0;
     state[91] = this.devices.parallel1;
+    state[92] = this.devices.voodoo1;
 
     return state;
 };
@@ -740,6 +748,7 @@ CPU.prototype.set_state = function(state)
     this.devices.vmware && state[89] && this.devices.vmware.set_state(state[89]);
     this.devices.parallel0 && state[90] && this.devices.parallel0.set_state(state[90]);
     this.devices.parallel1 && state[91] && this.devices.parallel1.set_state(state[91]);
+    this.devices.voodoo1 && state[92] && this.devices.voodoo1.set_state(state[92]);
 
     this.fw_value = state[62];
 
@@ -950,6 +959,10 @@ CPU.prototype.reboot_internal = function()
     if(this.devices.ps2)
     {
         this.devices.ps2.reset();
+    }
+    if(this.devices.voodoo1)
+    {
+        this.devices.voodoo1.reset();
     }
 
     this.load_bios();
@@ -1180,6 +1193,11 @@ CPU.prototype.init = function(settings, device_bus)
         this.devices.dma = new DMA(this);
 
         this.devices.vga = new VGAScreen(this, device_bus, settings.screen, settings.vga_memory_size || 8 * 1024 * 1024);
+
+        if(settings.voodoo1)
+        {
+            this.devices.voodoo1 = new Voodoo1(this, device_bus, settings.voodoo1);
+        }
 
         this.devices.ps2 = new PS2(this, device_bus);
         this.devices.vmware = new VMwareMouse(this, device_bus);
